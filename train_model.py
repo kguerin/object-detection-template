@@ -1,3 +1,7 @@
+from __future__ import division
+from __future__ import print_function
+from __future__ import absolute_import
+
 import sys
 sys.path.append("slim")
 
@@ -11,10 +15,6 @@ from PIL import Image
 from collections import namedtuple, OrderedDict
 from object_detection.utils import dataset_util
 from tqdm import tqdm
-
-from __future__ import division
-from __future__ import print_function
-from __future__ import absolute_import
 
 import path
 import cv2
