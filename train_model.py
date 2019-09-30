@@ -43,8 +43,7 @@ from numpy.random import seed
 seed(2018)
 set_random_seed(2018)
 
-baseModelName = sys.argv[1]
-dataSetPath = "/floyd/input/{}/".format(baseModelName)
+dataSetPath = "/floyd/input/data/"
 
 labelfilepath = "dynamiclabels.txt"
 
