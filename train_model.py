@@ -53,7 +53,7 @@ CSV_INPUT = dataSetPath + "annotations.csv"
 IMAGE_DIR = dataSetPath + "images/"
 
 # Path to output TFRecord
-OUTPUT = '/floyd/tfrecords_data'
+OUTPUT = 'tfrecords_data'
 data = pd.read_csv(CSV_INPUT)
 recordCount = data.shape[0]
 #  Train / Val split
