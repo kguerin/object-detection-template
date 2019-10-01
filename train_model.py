@@ -42,7 +42,8 @@ from tensorflow import set_random_seed
 from numpy.random import seed
 seed(2018)
 set_random_seed(2018)
-
+# passed in when invoking
+baseModelName = sys.argv[1] 
 dataSetPath = "/floyd/input/data/"
 
 labelfilepath = "dynamiclabels.txt"
