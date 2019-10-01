@@ -82,6 +82,9 @@ def writeLabelsTxtFile(objectlabels):
 writeLabelsTxtFile(objectlabels)    
 print("Creating tensorflowdata for {}".format(objectlabels))
 
+#set number of epochs to 10000 for each label
+NUM_EPOCHS  = 10000 * len(objectlabels)
+
 def writePipelineConfig(objectlabels):
     template = open("models/ssdlite_mobilenet_v2_coco_2018_05_09/pipeline-template.config","r")
     templateContents = template.read()
@@ -166,3 +169,194 @@ def create_tf_example(group, path):
         'image/object/class/label': dataset_util.int64_list_feature(classes)
     }))
     return tf_example
+
+##################################################
+# create tf records #
+##################################################
+
+# Prepare the TFRecord Output
+TRAIN_RECORD_FILE = os.path.join(OUTPUT, 'train.tfrecord')
+EVAL_RECORD_FILE = os.path.join(OUTPUT, 'eval.tfrecord')
+
+# TRAIN TFRecord
+writer = tf.python_io.TFRecordWriter(path=TRAIN_RECORD_FILE)
+path_to_images = os.path.join(os.getcwd(), IMAGE_DIR)
+
+# From CSV to TFRecord
+grouped = split(train_df, 'filename')
+for group in tqdm(grouped):
+    tf_example = create_tf_example(group, path_to_images)
+    writer.write(tf_example.SerializeToString())
+writer.close()
+
+# EVAL TFRecord
+writer = tf.python_io.TFRecordWriter(path=EVAL_RECORD_FILE)
+path_to_images = os.path.join(os.getcwd(), IMAGE_DIR)
+
+# From CSV to TFRecord
+grouped = split(eval_df, 'filename')
+for group in tqdm(grouped):
+    tf_example = create_tf_example(group, path_to_images)
+    writer.write(tf_example.SerializeToString())
+writer.close()
+
+print('Successfully created the TFRecords: {}'.format(OUTPUT))
+
+
+
+##################################################
+# TRAINING CONFIGURATION (Local, Multi-GPUs, Distributed) #
+##################################################
+
+MASTER = ''  # Name of the TensorFlow master to use
+TASK = 0  # task id
+NUM_CLONES = 1  # Number of clones to deploy per worker.
+
+# Force clones to be deployed on CPU.  Note that even if 
+# set to False (allowing ops to run on gpu), some ops may 
+# still be run on the CPU if they have no GPU kernel.
+CLONE_ON_CPU = False
+
+WORKER_REPLICAS = 1  # Number of worker+trainer replicas.
+PS_TASKS = 0  # Number of parameter server tasks. If None, does not use a parameter server.
+TRAIN_DIR = 'trained_models/ssdlite_mobilenet_v2_coco_{}'.format(baseModelName)  # Directory to save the checkpoints and training summaries.
+
+# Path to a pipeline_pb2.TrainEvalPipelineConfig config
+# file. If provided, other configs are ignored
+PIPELINE_CONFING_PATH = 'models/ssdlite_mobilenet_v2_coco_2018_05_09/pipeline.config'
+TRAIN_CONFIG_PATH = ''  # Path to a train_pb2.TrainConfig config file.
+INPUT_CONFIG_PATH = ''  # Path to an input_reader_pb2.InputReader config file.
+MODEL_CONFIG_PATH = ''  # Path to a model_pb2.DetectionModel config file.
+
+# Get configuration for training
+(create_input_dict_fn,
+model_fn,
+train_config,
+master,
+task,
+worker_job_name,
+ps_tasks,
+worker_replicas,
+is_chief,
+graph_rewriter_fn) = get_train_config(TASK,
+                                     PS_TASKS,
+                                     TRAIN_DIR,
+                                     PIPELINE_CONFING_PATH,
+                                     TRAIN_CONFIG_PATH,
+                                     MODEL_CONFIG_PATH,
+                                     INPUT_CONFIG_PATH,
+                                     WORKER_REPLICAS,
+                                     MASTER)
+
+train_config.num_steps = NUM_EPOCHS
+
+##################################################
+# TRAIN THE MODEL #
+##################################################
+
+trainer.train(
+  create_input_dict_fn,
+  model_fn,
+  train_config,
+  master,
+  task,
+  NUM_CLONES,
+  worker_replicas,
+  CLONE_ON_CPU,
+  ps_tasks,
+  worker_job_name,
+  is_chief,
+  TRAIN_DIR,
+  graph_hook_fn=graph_rewriter_fn)
+
+
+##################################################
+# EVALUATE THE MODEL #
+##################################################
+
+from object_detection import evaluator
+from object_detection.utils import label_map_util
+
+tf.reset_default_graph()
+
+##############################
+# CONFIGURATION (Evaluation) #
+##############################
+
+# Directory to write eval summaries to.
+EVAL_DIR = 'trained_models/ssdlite_mobilenet_v2_coco_2018_05_09/eval' 
+
+# If training data should be evaluated for this job.
+EVAL_TRAINING_DATA = False
+
+# Option to only run a single pass of evaluation. 
+# Overrides the `max_evals` parameter in the provided config
+RUN_ONCE = True
+
+# Directory containing checkpoints to evaluate, typically
+# set to `train_dir` used in the training job.
+CHECKPOINT_DIR = TRAIN_DIR
+
+EVAL_CONFIG_PATH = ''  # Path to a eval_pb2.TrainConfig config file.
+EVAL_INPUT_CONFIG_PATH = ''  # Path to an input_reader_pb2.InputReader config file.
+MODEL_CONFIG_PATH = ''  # Path to a model_pb2.DetectionModel config file.
+
+# Get configuration for Evaluation
+(create_input_dict_fn,
+model_fn,
+eval_config,
+categories,
+graph_rewriter_fn) = get_eval_config(EVAL_DIR,
+                                    PIPELINE_CONFING_PATH,
+                                    EVAL_CONFIG_PATH,
+                                    MODEL_CONFIG_PATH,
+                                    EVAL_INPUT_CONFIG_PATH,
+                                    EVAL_TRAINING_DATA,
+                                    RUN_ONCE)
+
+######################################
+# HOW TO EDIT EVAL CONFIG FROM CODE #
+######################################
+
+# You can change the setting in this way,
+# e.g. for evaluate only once
+# eval_config.max_evals = 1
+
+print("Eval configuration: \n", '-'*30, '\n', eval_config)
+
+######################################
+# EXPORT THE MODEL #
+######################################
+
+# Exporting the model for Evaluation
+from google.protobuf import text_format
+from object_detection import exporter
+from object_detection.protos import pipeline_pb2
+
+slim = tf.contrib.slim
+tf.reset_default_graph()
+
+config_override=''
+input_shape=None
+trained_checkpoint_prefix = os.path.join(TRAIN_DIR, 'model.ckpt-' + str(NUM_EPOCHS) ) # EDIT: model.ckpt-<iteration>
+
+output_directory='trained_models/exported_model'
+
+# Type of input node. Can be one of :
+# [`image_tensor`, `encoded_image_string_tensor`,`tf_example`]
+input_type='image_tensor' 
+
+pipeline_config = pipeline_pb2.TrainEvalPipelineConfig()
+with tf.gfile.GFile(PIPELINE_CONFING_PATH, 'r') as f:
+    text_format.Merge(f.read(), pipeline_config)
+text_format.Merge(config_override, pipeline_config)
+if input_shape:
+    input_shape = [
+        int(dim) if dim != '-1' else None
+        for dim in input_shape.split(',')
+    ]
+else:
+    input_shape = None
+exporter.export_inference_graph(input_type, pipeline_config,
+                                  trained_checkpoint_prefix,
+                                  output_directory, input_shape)
