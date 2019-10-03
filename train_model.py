@@ -45,9 +45,7 @@ set_random_seed(2018)
 # passed in when invoking
 baseModelName = sys.argv[1] 
 dataSetPath = "/floyd/input/data/"
-
 labelfilepath = "dynamiclabels.txt"
-
 # Path to the CSV input
 CSV_INPUT = dataSetPath + "annotations.csv"
 # Path to the image directory
@@ -83,8 +81,8 @@ def writeLabelsTxtFile(objectlabels):
 writeLabelsTxtFile(objectlabels)    
 print("Creating tensorflowdata for {}".format(objectlabels))
 
-#set number of epochs to 10000 for each label
-NUM_EPOCHS  = 10000 * len(objectlabels)
+#set number of epochs to 7000 for each label
+NUM_EPOCHS  = 20 * len(objectlabels)
 
 def writePipelineConfig(objectlabels):
     template = open("models/ssdlite_mobilenet_v2_coco_2018_05_09/pipeline-template.config","r")
@@ -271,60 +269,6 @@ trainer.train(
   graph_hook_fn=graph_rewriter_fn)
 
 
-##################################################
-# EVALUATE THE MODEL #
-##################################################
-
-from object_detection import evaluator
-from object_detection.utils import label_map_util
-
-tf.reset_default_graph()
-
-##############################
-# CONFIGURATION (Evaluation) #
-##############################
-
-# Directory to write eval summaries to.
-EVAL_DIR = 'trained_models/ssdlite_mobilenet_v2_coco_2018_05_09/eval' 
-
-# If training data should be evaluated for this job.
-EVAL_TRAINING_DATA = False
-
-# Option to only run a single pass of evaluation. 
-# Overrides the `max_evals` parameter in the provided config
-RUN_ONCE = True
-
-# Directory containing checkpoints to evaluate, typically
-# set to `train_dir` used in the training job.
-CHECKPOINT_DIR = TRAIN_DIR
-
-EVAL_CONFIG_PATH = ''  # Path to a eval_pb2.TrainConfig config file.
-EVAL_INPUT_CONFIG_PATH = ''  # Path to an input_reader_pb2.InputReader config file.
-MODEL_CONFIG_PATH = ''  # Path to a model_pb2.DetectionModel config file.
-
-# Get configuration for Evaluation
-(create_input_dict_fn,
-model_fn,
-eval_config,
-categories,
-graph_rewriter_fn) = get_eval_config(EVAL_DIR,
-                                    PIPELINE_CONFING_PATH,
-                                    EVAL_CONFIG_PATH,
-                                    MODEL_CONFIG_PATH,
-                                    EVAL_INPUT_CONFIG_PATH,
-                                    EVAL_TRAINING_DATA,
-                                    RUN_ONCE)
-
-######################################
-# HOW TO EDIT EVAL CONFIG FROM CODE #
-######################################
-
-# You can change the setting in this way,
-# e.g. for evaluate only once
-# eval_config.max_evals = 1
-
-print("Eval configuration: \n", '-'*30, '\n', eval_config)
-
 ######################################
 # EXPORT THE MODEL #
 ######################################
@@ -341,7 +285,7 @@ config_override=''
 input_shape=None
 trained_checkpoint_prefix = os.path.join(TRAIN_DIR, 'model.ckpt-' + str(NUM_EPOCHS) ) # EDIT: model.ckpt-<iteration>
 
-output_directory='trained_models/exported_model'
+output_directory='/floyd/home/trained_model/'
 
 # Type of input node. Can be one of :
 # [`image_tensor`, `encoded_image_string_tensor`,`tf_example`]
