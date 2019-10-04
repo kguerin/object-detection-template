@@ -82,7 +82,7 @@ writeLabelsTxtFile(objectlabels)
 print("Creating tensorflowdata for {}".format(objectlabels))
 
 #set number of epochs to 7000 for each label
-NUM_EPOCHS  = 20 * len(objectlabels)
+NUM_EPOCHS  = 7000 * len(objectlabels)
 
 def writePipelineConfig(objectlabels):
     template = open("models/ssdlite_mobilenet_v2_coco_2018_05_09/pipeline-template.config","r")
